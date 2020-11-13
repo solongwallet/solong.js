@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Get account balance</title>
+</head>
+<body>
+  <script src="../lib/index.iife.js"></script>
+  <script>
+
+        const mnemonic = solong.AccountManager.generateMnemonic();
+        console.log("mnemonic:", mnemonic);
+
+        const hookMnemonic = 'height imitate comic project hire suffer cheap stable column because inmate sick';
+        solong.AccountManager.importAccount(hookMnemonic).then((account) => {
+            console.log("import account:", account.publicKey.toBase58());
+            solong.AccountManager.lock(account, '123456').then(()=> {
+                solong.AccountManager.storageAccounts().then((accounts) => {
+                console.log("storage accounts:", accounts);
+                for (const pubKey of accounts) {
+                    solong.AccountManager.unlock(pubKey, '123456').then((account) => {
+                        console.log("unlock account:", account.publicKey.toBase58());
+                    });
+                }
+            });
+
+
+        });
+        });
+
+
+
+  </script>
+</body>
+</html>
