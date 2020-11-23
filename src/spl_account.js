@@ -7,9 +7,9 @@ import {Account as SolanaAccount,
 
 export class SPLAccount {
 
-    constructor(deposit, mint, amount, account, decimals, uiAmount) {
+    constructor(deposit, mint, amount, decimals, uiAmount, account) {
         this._deposit = deposit
-        this._amount = amount
+        this._amount = amount*1
         this._name = ''
         this._symbol = ''
         this._mint = mint
@@ -61,15 +61,42 @@ export class SPLAccount {
      * transfer SPL Token to others
      * 
      * @param deposit transfer to account
-     * @param amount amount for transfer , already mutli LAMPORTS_PER_SOL
+     * @param uiAmount amount for transfer , already mutli decimals
      */
-    async transfer(deposit, amount) {
-        return connection.transferSPL(
-            new PublicKey(this._deposit),
-            new PublicKey(deposit), 
-            amount*1000000,
-            this._account 
-        )
+    async transfer(deposit, uiAmount) {
+        const isSOLAccount = await connection.isSOLAccount(deposit)
+        if (! isSOLAccount) {
+            const isSPL= await connection.checkOwnedSPL(this._mint, deposit)
+            if (isSPL) {
+                return connection.transferSPL(
+                    new PublicKey(this._deposit),
+                    new PublicKey(deposit), 
+                    uiAmount * (10**this._decimals),
+                    this._account 
+                )
+            } else {
+                return new Promise((resolve, reject)=>{
+                    reject(null)
+                })
+            }
+        } else {
+            let splDeposit = await connection.getSPLAccount(this._mint, deposit)
+            if (null == splDeposit) {
+                // create spl token and transfer
+                return connection.transferSPLWithCreate(
+                    new PublicKey(this._deposit),
+                    new PublicKey(deposit), 
+                    new PublicKey(this._mint),
+                    uiAmount * (10**this._decimals),
+                    this._account)
+            } else {
+                return connection.transferSPL(
+                    new PublicKey(this._deposit),
+                    new PublicKey(splDeposit), 
+                    uiAmount * (10**this._decimals),
+                    this._account)
+            }
+        }
     }
 
 }

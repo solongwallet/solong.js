@@ -9,12 +9,14 @@ import {SPLAccount} from './spl_account'
 import {deserializeAccount, cache} from './cache'
 import {TOKEN_PROGRAM, WRAPPED_SOL_MINT} from './token'
 import {Token, AccountLayout, u64} from '@solana/spl-token'
+import {Mint} from './mint'
 
 export class Account extends SolanaAccount{
     constructor(key) {
         super(key)
         this._key=key 
         this._spls = new Map()
+        this._mints= new Map()
     }
 
 
@@ -85,9 +87,22 @@ export class Account extends SolanaAccount{
     async getSPLAccounts() {
         const spls = await connection.getProgramAccounts(super.publicKey.toBase58())
         for (const coin of spls) {
+            //deposit, mint, amount, decimals, uiAmount, account
             let spl = new SPLAccount(coin.deposit, coin.mint, coin.amount, coin.decimals, coin.uiAmount, this) 
             this._spls[coin.mint] = spl
         }
+    }
+
+
+    async querySPLMints(){
+        const mints= await connection.getSPLMints(super.publicKey.toBase58())
+        for (const mint of mints) {
+            console.log("mint:", mint)
+            //mint, mintAuthority, freezeAuthority, decimals
+            let m= new Mint(mint.mint, mint.mintAuthority, mint.freezeAuthority, mint.decimals) 
+            this._mints[mint.mint] =m 
+        }
+        return this._mints
     }
 
 
@@ -98,7 +113,6 @@ export class Account extends SolanaAccount{
      */
     async getSPLBalance(mint, deposit) {
         const spl = this._spls[mint]
-        console.log("spl:", spl)
         if (! spl) {
             return null
         }
@@ -113,10 +127,48 @@ export class Account extends SolanaAccount{
      */
     async transferSPLToken(mint, deposit, amount) {
         const spl = this._spls[mint]
+        console.log("spl:",spl)
         if (! spl) {
             return null
         }
         return spl.transfer(deposit, amount)
+    }
+
+    async mintSPLToken(mint, deposit, uiAmount) {
+        const mintInfo = await connection.getMintInfo(mint)
+        const amount = uiAmount*(10**mintInfo.decimals)
+        const isSOLAccount = await connection.isSOLAccount(deposit)
+        if (! isSOLAccount) {
+            const isSPL= await connection.checkOwnedSPL(mint, deposit)
+            if (isSPL) {
+                // mint to
+                return connection.mintSPLToken(
+                    new PublicKey(mint), 
+                    new PublicKey(deposit), 
+                    amount, 
+                    this)
+            } else {
+                return new Promise((resolve, reject)=>{
+                    reject(null)
+                })
+            }
+        } else {
+            let splDeposit = await connection.getSPLAccount(mint, deposit)
+            if (null == splDeposit) {
+                // create spl token and mint to
+                return connection.mintSPLTokenWithCreate(
+                    new PublicKey(mint), 
+                    new PublicKey(deposit), 
+                    amount, 
+                    this)
+            } else {
+                return connection.mintSPLToken(
+                    new PublicKey(mint), 
+                    new PublicKey(splDeposit), 
+                    amount, 
+                    this)
+            }
+        }
     }
 
     /**
@@ -130,6 +182,7 @@ export class Account extends SolanaAccount{
         const splAccount = new Account();
         return connection.createAndInitAccountInstruction(mint, splAccount, this)
     }
+
 
 
 

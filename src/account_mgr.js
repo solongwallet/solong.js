@@ -9,7 +9,7 @@ import {connection} from './connection'
 import nacl from 'tweetnacl'
 import * as bip32 from 'bip32'
 import * as bip39 from 'bip39'
-import { PublicKey } from '@solana/web3.js'
+import { PublicKey,LAMPORTS_PER_SOL } from '@solana/web3.js'
 
 export class AccountMgr{
     constructor() {
@@ -169,6 +169,30 @@ export class AccountMgr{
     }
 
     /**
+     * get account's SOL balance 
+     * @param {*} publicKey 
+     */
+    async getSOLBalance(publicKey) {
+        const lamports = await connection.getBalance(new PublicKey(publicKey))
+        return lamports / LAMPORTS_PER_SOL
+    }
+
+    async getSPLBalance(publicKey) {
+        const uiAmount= await connection.getTokenAccountBalance(new PublicKey(publicKey))
+        return uiAmount
+    }
+
+    /**
+     * isSOLAccount check is SOL Account
+     * @param {} publicKey 
+     */
+
+    async isSOLAccount(publicKey) {
+        let ret = connection.isSOLAccount(publicKey)
+        return ret
+    }
+
+    /**
     * @private
     */
     async _mnemonicToSecretKey(mnemonic) {
@@ -178,6 +202,7 @@ export class AccountMgr{
         const derivedSeed = bip32.fromSeed(rootSeed).derivePath("m/501'/0'/0/0").privateKey
         return nacl.sign.keyPair.fromSeed(derivedSeed).secretKey
     }
+
 
 }
 
