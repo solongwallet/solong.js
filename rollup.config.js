@@ -1,90 +1,167 @@
+import nodeResolve from '@rollup/plugin-node-resolve';
+import commonjs from '@rollup/plugin-commonjs';
 import babel from 'rollup-plugin-babel';
-import builtins from 'rollup-plugin-node-builtins';
-import commonjs from 'rollup-plugin-commonjs';
-import copy from 'rollup-plugin-copy';
-import globals from 'rollup-plugin-node-globals';
-import json from 'rollup-plugin-json';
-import nodeResolve from 'rollup-plugin-node-resolve';
-import replace from 'rollup-plugin-replace';
-import {terser} from 'rollup-plugin-terser';
+import replace from '@rollup/plugin-replace';
+import typescript from 'rollup-plugin-typescript2';
+import { terser } from 'rollup-plugin-terser';
 
-const env = process.env.NODE_ENV;
+import pkg from './package.json';
 
-function generateConfig(configType) {
-  const config = {
-    input: 'src/index.js',
-    plugins: [
-      json(),
-      babel({
-        exclude: '**/node_modules/**',
-        runtimeHelpers: true,
-      }),
-      replace({
-        'process.env.NODE_ENV': JSON.stringify(env),
-      }),
-      commonjs(),
-      copy({
-        targets: [{src: 'module.d.ts', dest: 'lib', rename: 'index.d.ts'}],
-      }),
-    ],
-  };
+const fileName = 'index';
+const extensions = ['.ts'];
+const noDeclarationFiles = { compilerOptions: { declaration: false } };
 
-  switch (configType) {
-    case 'browser':
-      config.output = [
-        {
-          file: 'lib/index.iife.js',
-          format: 'iife',
-          name: 'solong',
-          sourcemap: true,
+const babelRuntimeVersion = pkg.devDependencies['@babel/runtime'].replace(
+    /^[^0-9]*/,
+    ''
+);
+
+const makeExternalPredicate = externalArr => {
+    if (externalArr.length === 0) {
+        return () => false;
+    }
+    const pattern = new RegExp(`^(${externalArr.join('|')})($|/)`);
+    return id => pattern.test(id);
+};
+
+export default [
+    // CommonJS
+    // {
+    //     input: 'src/index.ts',
+    //     output: { file: `lib/${fileName}.js`, format: 'cjs', indent: false },
+    //     external: makeExternalPredicate([
+    //         ...Object.keys(pkg.dependencies || {}),
+    //         ...Object.keys(pkg.peerDependencies || {})
+    //     ]),
+    //     plugins: [
+    //         nodeResolve({
+    //             extensions
+    //         }),
+    //         commonjs(),
+    //         typescript({ useTsconfigDeclarationDir: true }),
+    //         babel({
+    //             extensions,
+    //             plugins: [
+    //                 [
+    //                     '@babel/plugin-transform-runtime',
+    //                     { version: babelRuntimeVersion }
+    //                 ]
+    //             ],
+    //             runtimeHelpers: true
+    //         })
+    //     ]
+    // },
+
+    // ES
+    {
+        input: 'src/index.ts',
+        output: { file: `es/${fileName}.js`, format: 'es', indent: false },
+        external: makeExternalPredicate([
+            ...Object.keys(pkg.dependencies || {}),
+            ...Object.keys(pkg.peerDependencies || {})
+        ]),
+        plugins: [
+            nodeResolve({
+                extensions
+            }),
+            commonjs(),
+            typescript({ useTsconfigDeclarationDir: true }),
+            babel({
+                extensions,
+                plugins: [
+                    [
+                        '@babel/plugin-transform-runtime',
+                        { version: babelRuntimeVersion, useESModules: true }
+                    ]
+                ],
+                runtimeHelpers: true
+            })
+        ]
+    },
+
+    // ES for Browsers
+    // {
+    //     input: 'src/index.ts',
+    //     output: { file: `es/${fileName}.mjs`, format: 'es', indent: false },
+    //     plugins: [
+    //         nodeResolve({
+    //             extensions
+    //         }),
+    //         replace({
+    //             'process.env.NODE_ENV': JSON.stringify('production')
+    //         }),
+    //         commonjs(),
+    //         typescript({ tsconfigOverride: noDeclarationFiles }),
+    //         babel({
+    //             extensions,
+    //             exclude: 'node_modules/**'
+    //         }),
+    //         terser({
+    //             compress: {
+    //                 pure_getters: true,
+    //                 unsafe: true,
+    //                 unsafe_comps: true,
+    //                 warnings: false
+    //             }
+    //         })
+    //     ]
+    // },
+
+    // UMD Development
+    {
+        input: 'src/index.ts',
+        output: {
+            file: `dist/${fileName}.js`,
+            format: 'umd',
+            name: 'AssertEngine',
+            indent: false
         },
-      ];
-      config.plugins.push(builtins());
-      config.plugins.push(globals());
-      config.plugins.push(
-        nodeResolve({
-          browser: true,
-        }),
-      );
+        plugins: [
+            nodeResolve({
+                extensions
+            }),
+            commonjs(),
+            typescript({ tsconfigOverride: noDeclarationFiles }),
+            babel({
+                extensions,
+                exclude: 'node_modules/**'
+            }),
+            replace({
+                'process.env.NODE_ENV': JSON.stringify('development')
+            })
+        ]
+    },
 
-      if (env === 'production') {
-        config.plugins.push(
-          terser({
-            mangle: false,
-            compress: false,
-          }),
-        );
-      }
-
-      break;
-    case 'node':
-      config.output = [
-        {
-          file: 'lib/index.cjs.js',
-          format: 'cjs',
-          sourcemap: true,
+    // UMD Production
+    {
+        input: 'src/index.ts',
+        output: {
+            file: `dist/${fileName}.min.js`,
+            format: 'umd',
+            name: 'AssertEngine',
+            indent: false
         },
-        {
-          file: 'lib/index.esm.js',
-          format: 'es',
-          sourcemap: true,
-        },
-      ];
-      config.external = [
-        'tweetnacl',
-        'bip32',
-        'bip39',
-        'bs58',
-        'crypto',
-        '@solana/web3.js',
-      ];
-      break;
-    default:
-      throw new Error(`Unknown configType: ${configType}`);
-  }
-
-  return config;
-}
-
-export default [generateConfig('node'), generateConfig('browser')];
-//export default [generateConfig('node')];
+        plugins: [
+            nodeResolve({
+                extensions
+            }),
+            commonjs(),
+            typescript({ tsconfigOverride: noDeclarationFiles }),
+            babel({
+                extensions,
+                exclude: 'node_modules/**'
+            }),
+            replace({
+                'process.env.NODE_ENV': JSON.stringify('production')
+            }),
+            terser({
+                compress: {
+                    pure_getters: true,
+                    unsafe: true,
+                    unsafe_comps: true,
+                    warnings: false
+                }
+            })
+        ]
+    }
+];
